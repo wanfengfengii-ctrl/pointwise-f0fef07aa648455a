@@ -1,0 +1,22 @@
+{
+  "format": 1,
+  "account": "D-11111111111111111111111111111111",
+  "day": "2026-01-14",
+  "revision": "4",
+  "original": {
+    "rows": [{"slot": "S01", "observation_id": "b", "batch": "B", "reading": "20"}],
+    "count": 1,
+    "total": "20"
+  },
+  "evidence": {
+    "batches": ["H", "B", "A"],
+    "observations": [
+      {"slot": "S01", "observation_id": "b", "batch": "B", "version": "2", "reading": "20"},
+      {"slot": "S01", "observation_id": "a", "batch": "A", "version": "1", "reading": "10"}
+    ],
+    "dispositions": [
+      {"observation_id": "a", "batch": "B", "sequence": "2", "action": "enable"},
+      {"observation_id": "a", "batch": "H", "sequence": "1", "action": "disable"}
+    ]
+  }
+}

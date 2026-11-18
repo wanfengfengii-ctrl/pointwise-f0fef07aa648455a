@@ -1,0 +1,10 @@
+{
+  "day": "2026-01-14",
+  "operations": [
+    ["admit", "A", [["S01", "a", 1, 10]]],
+    ["disposition", "H", "a", 1, "disable"],
+    ["admit", "B", [["S01", "b", 2, 20]]],
+    ["disposition", "B", "a", 2, "enable"]
+  ],
+  "correction": ["admit", "C", [["S01", "c", 3, 30]]]
+}

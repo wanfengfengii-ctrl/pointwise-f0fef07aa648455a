@@ -155,6 +155,25 @@ def check_boundaries(root, close_history, read_history, history_unavailable):
     equal(simulate(station, old, {'B', 'H'}).rows, (A,))
 
 
+def run_verify(root):
+    from rehearsal.report import HistoryUnavailable, read_slot_history
+    from seal.cut import close_day_with_history
+
+    cases = [incident(root, order, states, intervals, close_day_with_history, read_slot_history,
+                      show=False) for order, states, intervals in CASES]
+    check_exchange(root, *cases, read_slot_history)
+    check_boundaries(root, close_day_with_history, read_slot_history, HistoryUnavailable)
+    print('固定日账离线修订区间核账通过')
+
+
+def run_demo(root):
+    from rehearsal.report import read_slot_history
+    from seal.cut import close_day_with_history
+
+    for order, states, intervals in CASES:
+        incident(root, order, states, intervals, close_day_with_history, read_slot_history, show=True)
+
+
 def main():
     parser = argparse.ArgumentParser(description='清溪固定日账的历史区间夹具')
     parser.add_argument('command', choices=('fixture', 'verify', 'demo'))
@@ -163,16 +182,10 @@ def main():
         root = Path(directory)
         if command == 'fixture':
             fixture(root)
-            return
-        from rehearsal.report import HistoryUnavailable, read_slot_history
-        from seal.cut import close_day_with_history
-
-        cases = [incident(root, order, states, intervals, close_day_with_history, read_slot_history,
-                          show=command == 'demo') for order, states, intervals in CASES]
-        if command == 'verify':
-            check_exchange(root, *cases, read_slot_history)
-            check_boundaries(root, close_day_with_history, read_slot_history, HistoryUnavailable)
-            print('固定日账离线修订区间核账通过')
+        elif command == 'verify':
+            run_verify(root)
+        else:
+            run_demo(root)
 
 
 if __name__ == '__main__':

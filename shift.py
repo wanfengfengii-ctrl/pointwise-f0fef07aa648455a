@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+import history_examples
 from archive.exchange import exchange_day
 from archive.lookup import read_day
 from archive.storage import ArchiveStore
@@ -138,8 +139,15 @@ def main():
     if command == 'verify':
         suite = unittest.defaultTestLoader.discover(str(_ROOT / 'tests'), top_level_dir=str(_ROOT))
         result = unittest.TextTestRunner(verbosity=2).run(suite)
-        return 0 if result.wasSuccessful() else 1
+        if not result.wasSuccessful():
+            return 1
+        with TemporaryDirectory(prefix='qingxi-history-verify-') as directory:
+            history_examples.run_verify(Path(directory))
+        return 0
     demo()
+    print('--- 历史区间交接演示 ---')
+    with TemporaryDirectory(prefix='qingxi-history-demo-') as directory:
+        history_examples.run_demo(Path(directory))
     return 0
 
 

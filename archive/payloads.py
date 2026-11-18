@@ -49,12 +49,25 @@ class Ledger:
 
 
 @dataclass(frozen=True)
+class HistoryTransaction:
+    revision: int
+    observations: tuple[FrozenObservation, ...]
+    dispositions: tuple[FrozenDisposition, ...]
+
+
+@dataclass(frozen=True)
+class DayHistory:
+    transactions: tuple[HistoryTransaction, ...]
+
+
+@dataclass(frozen=True)
 class FixedDay:
     account: str
     day: str
     revision: int
     original: Ledger
     evidence: DayEvidence
+    history: DayHistory | None = None
 
 
 def valid_account(value: object) -> bool:
@@ -162,6 +175,10 @@ def validate_payload(fixed: FixedDay) -> None:
         candidates = _check_observations(fixed.evidence.observations, batches)
         _check_dispositions(fixed.evidence.dispositions, batches, candidates)
         _check_ledger(fixed.original, candidates)
+        if fixed.history is not None:
+            from archive.history import validate_history
+
+            validate_history(fixed)
     except InvalidPayload:
         raise
     except ValueError as exc:

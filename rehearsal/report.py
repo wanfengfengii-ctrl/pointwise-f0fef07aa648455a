@@ -1,11 +1,17 @@
 from typing import Iterable
 
+from archive.history import slot_intervals
 from archive.lookup import load_fixed_day
-from archive.payloads import FixedDay, Ledger, make_ledger
+from archive.payloads import FixedDay, Ledger, LedgerRow, make_ledger
 from archive.storage import ArchiveStore
+from intake.observations import require_identifier
 from rehearsal.batch_scope import resolve_quarantine, retain_unquarantined
 from rehearsal.eligibility import resolve_eligible_observations
 from rehearsal.select_rows import select_rows
+
+
+class HistoryUnavailable(LookupError):
+    pass
 
 
 def build_rehearsal_report(fixed: FixedDay, bad_batches: Iterable[str] = ()) -> Ledger:
@@ -18,3 +24,13 @@ def build_rehearsal_report(fixed: FixedDay, bad_batches: Iterable[str] = ()) -> 
 def simulate(store: ArchiveStore, account: str, bad_batches: Iterable[str] = ()) -> Ledger:
     fixed = load_fixed_day(store, account)
     return build_rehearsal_report(fixed, bad_batches)
+
+
+def read_slot_history(
+    store: ArchiveStore, account: str, slot: str
+) -> tuple[tuple[int, int, LedgerRow | None], ...]:
+    fixed = load_fixed_day(store, account)
+    require_identifier(slot, 'slot')
+    if fixed.history is None:
+        raise HistoryUnavailable(f'{account} carries no revision history')
+    return slot_intervals(fixed.history, slot, fixed.revision)

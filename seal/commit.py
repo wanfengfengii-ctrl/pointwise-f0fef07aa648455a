@@ -21,7 +21,7 @@ def commit_day(
 ) -> str:
     account = 'D-' + uuid.uuid4().hex
     fixed = FixedDay(account, materialization.day, materialization.revision,
-                     materialization.original, materialization.evidence)
+                     materialization.original, materialization.evidence, materialization.history)
     contents = encode_fixed_day(fixed)
     try:
         with store.transaction() as connection:

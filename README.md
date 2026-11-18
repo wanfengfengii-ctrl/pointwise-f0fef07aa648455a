@@ -45,8 +45,18 @@ without_b_and_h = simulate(station, account, {'B', 'H'})
 - `admit(source, day, batch, records)` 返回 `AdmissionReceipt`，包含 `revision` 和按输入顺序排列的 `observation_ids`。日号、槽号、原批号和观测号是非空字符串，无首尾空白、NUL 或无效 UTF-8 字符。源库的观测号唯一。同一日、槽和版序只能接纳一条观测。批必须至少含一条观测。字段或身份冲突抛出 `AdmissionError`，整个批回滚。
 - `add_disposition(source, day, batch, observation_id, sequence, action)` 返回同日新修订。同日历史观测也可登记，目标未知、跨日、字段非法或同观测处置序冲突抛出 `DispositionError`。同日同一原批可以贡献观测、处置或两者。
 - `close_day(source, archive, day, revision, *, before_commit=None)` 返回形如 `D-` 加 32 位小写十六进制的固定日账号。未找到该日修订时抛出 `UnknownRevision`。同一有效修订可另外封存一份新号。可选的 `before_commit(account)` 在目录和载荷写入后、提交前运行，用于模拟发布中断。回调异常或归档数据库提交错误表现为 `PublicationError`，失败件不可领取。
-- `export_fixed_day(store, account)` 返回版本 1 的 UTF-8 JSON 字节。`accept_fixed_day(store, data)` 原子接纳并返回账号。`exchange_day(published, station, account)` 完成上述两步。重投同一规范化固定件返回原账号。非法件抛出 `InvalidPayload`，同号异件抛出 `ExchangeConflict`。账行顺序固定，证据中批次、候选、处置数组的排列无业务含义。`samples/manual_fixed_day.json` 是可直接接纳的有限样例。
+- `export_fixed_day(store, account)` 返回 UTF-8 JSON 字节：普通 `close_day` 件为版本 1，带历史的件为版本 2。`accept_fixed_day(store, data)` 原子接纳并返回账号。`exchange_day(published, station, account)` 完成上述两步。重投同一规范化固定件返回原账号。非法件抛出 `InvalidPayload`，同号异件抛出 `ExchangeConflict`。账行顺序固定，证据中批次、候选、处置数组的排列无业务含义。`samples/manual_fixed_day.json` 是可直接接纳的有限样例。
 - `read_day(store, account)` 和 `simulate(store, account, bad_batches=())` 返回 `Ledger`，包含按槽号排序的 `rows`、`count` 和 `total`。每行含 `slot`、`observation_id`、`batch` 和 `reading`。未知账号抛出 `UnknownDay`。剔除参数可传入一组批号，重复批号只计一次。非法参数抛出 `InvalidQuarantine`，任一批号不属于该件时整次抛出 `UnknownBatch`。试算不写入归档库。
+- `close_day_with_history(source, archive, day, revision, *, before_commit=None)` 与 `close_day` 参数、校验、账号形状、回调时点和异常一致，但把该日封账前的逐槽修订区间一并发布。
+- `read_slot_history(store, account, slot)` 返回按起点升序的 `tuple`，每项为 `(start, end, row)`；边界是整数，`row` 为 `LedgerRow` 或 `None`（空槽）。非法槽号抛 `ValueError`，未知账号抛 `UnknownDay`，旧版 V1 件抛 `HistoryUnavailable`。区间以半开方式无重叠覆盖 `[1, R+1)`，相邻区间仅在整条账行相同或同为 `None` 时合并。
+
+## 历史证据与读取的正确性约定
+
+发布方按源接纳事务的修订切分历史：一次 `admit` 或一次 `add_disposition` 是一个修订，事务内全部记录同一修订可见。某一修订 r 的槽状态，等于只按 `revision <= r` 的观测与处置、以原口径（目标最高处置序决定资格、每槽取最高版序）重算出的行或空槽；因此历史中的版序和处置序只比较当时已可见的记录，晚到的低版序或低处置序不会回写早先修订。
+
+接纳方在 `accept_fixed_day` 内可核对：修订从 1 连续、恰覆盖所封修订；每个事务至多一次处置且不混入接纳；处置目标在其修订之前已可见；观测号与槽版序、处置序不重复；历史中的观测、处置、原批目录与 `evidence` 完全一致；按历史重算的末修订各槽状态与 `original` 逐行一致。任一不符即 `InvalidPayload`，不新增账号、不改动既有成果。
+
+隔离站只依赖固定件内的历史，无须源库或发布库。`export_fixed_day` 将历史与 `original`、`evidence` 一起规范化发布；`account`、`day`、`revision`、`original`、`evidence` 各字段的编码与 V1 相同，仅 `format` 为 `2` 并多出 `history`。`accept_fixed_day` 在同一事务中写入载荷与目录，重投同号同件返回原账号，同号异历史或坏件分别抛 `ExchangeConflict` 或 `InvalidPayload`，保留首次固定结果；因此断源重开后按同一账号读到的原账、试算与历史区间就是当初发布的那一刻。
 
 ## 日账口径
 

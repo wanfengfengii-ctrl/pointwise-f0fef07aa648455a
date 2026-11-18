@@ -2,9 +2,11 @@ import json
 
 from archive.payloads import (
     DayEvidence,
+    DayHistory,
     FixedDay,
     FrozenDisposition,
     FrozenObservation,
+    HistoryTransaction,
     InvalidPayload,
     Ledger,
     LedgerRow,
@@ -14,6 +16,7 @@ from intake.observations import integer_text, read_integer_text
 
 
 _FORMAT = 1
+_HISTORY_FORMAT = 2
 
 
 def _ledger_row(row: LedgerRow) -> dict:
@@ -44,14 +47,32 @@ def _disposition(record: FrozenDisposition) -> dict:
     }
 
 
+def _history(fixed: FixedDay) -> dict | None:
+    if fixed.history is None:
+        return None
+    transactions = []
+    for transaction in sorted(fixed.history.transactions, key=lambda item: item.revision):
+        transactions.append({
+            'revision': integer_text(transaction.revision),
+            'observations': [_observation(record) for record in sorted(
+                transaction.observations, key=lambda item: item.observation_id
+            )],
+            'dispositions': [_disposition(record) for record in sorted(
+                transaction.dispositions, key=lambda item: (item.observation_id, item.sequence)
+            )],
+        })
+    return {'transactions': transactions}
+
+
 def encode_fixed_day(fixed: FixedDay) -> bytes:
     validate_payload(fixed)
     evidence = fixed.evidence
     original = fixed.original
     observations = sorted(evidence.observations, key=lambda record: record.observation_id)
     dispositions = sorted(evidence.dispositions, key=lambda record: (record.observation_id, record.sequence))
+    history = _history(fixed)
     document = {
-        'format': _FORMAT,
+        'format': _FORMAT if history is None else _HISTORY_FORMAT,
         'account': fixed.account,
         'day': fixed.day,
         'revision': integer_text(fixed.revision),
@@ -66,6 +87,8 @@ def encode_fixed_day(fixed: FixedDay) -> bytes:
             'dispositions': [_disposition(record) for record in dispositions],
         },
     }
+    if history is not None:
+        document['history'] = history
     return json.dumps(document, sort_keys=True, separators=(',', ':')).encode('utf-8')
 
 
@@ -111,15 +134,32 @@ def _decode_disposition(value: object) -> FrozenDisposition:
                              read_integer_text(row['sequence']), row['action'])
 
 
+def _decode_history(value: object) -> DayHistory:
+    doc = _object(value, 'transactions')
+    transactions = []
+    for item in _array(doc['transactions']):
+        record = _object(item, 'revision', 'observations', 'dispositions')
+        transactions.append(HistoryTransaction(
+            read_integer_text(record['revision']),
+            tuple(_decode_observation(row) for row in _array(record['observations'])),
+            tuple(_decode_disposition(row) for row in _array(record['dispositions'])),
+        ))
+    return DayHistory(tuple(transactions))
+
+
 def decode_fixed_day(data: bytes) -> FixedDay:
     if type(data) is not bytes:
         raise InvalidPayload('fixed day contents must be bytes')
     try:
         value = json.loads(data.decode('utf-8'), object_pairs_hook=_unique_object,
                            parse_constant=_reject_constant)
-        doc = _object(value, 'format', 'account', 'day', 'revision', 'original', 'evidence')
-        if type(doc['format']) is not int or doc['format'] != _FORMAT:
+        field = 'format', 'account', 'day', 'revision', 'original', 'evidence'
+        if type(value) is not dict:
+            raise InvalidPayload('invalid fixed day encoding')
+        version = value.get('format')
+        if type(version) is not int or version not in (_FORMAT, _HISTORY_FORMAT):
             raise InvalidPayload('unsupported fixed day format')
+        doc = _object(value, *field) if version == _FORMAT else _object(value, *field, 'history')
         original = _object(doc['original'], 'rows', 'count', 'total')
         evidence = _object(doc['evidence'], 'batches', 'observations', 'dispositions')
         fixed = FixedDay(
@@ -133,6 +173,7 @@ def decode_fixed_day(data: bytes) -> FixedDay:
                 tuple(_decode_observation(row) for row in _array(evidence['observations'])),
                 tuple(_decode_disposition(row) for row in _array(evidence['dispositions'])),
             ),
+            None if version == _FORMAT else _decode_history(doc['history']),
         )
         validate_payload(fixed)
         return fixed
